@@ -50,8 +50,46 @@
 
         <div class="form-group">
           <label for="bringToFrontInterval" data-i18n="bringToFrontLabel">Інтервал фокусування вікон (сек):</label>
-          <input type="number" id="bringToFrontInterval" name="bringToFrontInterval" min="5" step="1" value="20">
-          <small data-i18n="bringToFrontHelp" data-i18n-title="bringToFrontHelp">Частота показу вікон на передній план</small>
+          <input type="number" id="bringToFrontInterval" name="bringToFrontInterval" min="0" step="1" value="20">
+          <small data-i18n="bringToFrontHelp" data-i18n-title="bringToFrontHelp">Як часто виводити popup вікна на передній план (0 = ніколи)</small>
+        </div>
+
+        <div class="form-group">
+          <label for="popupRepeatCount" data-i18n="popupRepeatCountLabel">Тривалість повторів показу PopUp:</label>
+          <select id="popupRepeatCount" name="popupRepeatCount" class="repeat-select">
+            <option value="0">0 - Без повторів</option>
+            <option value="1">1 раз</option>
+            <option value="2">2 рази</option>
+            <option value="3" selected>3 рази</option>
+            <option value="4">4 рази</option>
+            <option value="5">5 разів</option>
+            <option value="6">6 разів</option>
+            <option value="7">7 разів</option>
+            <option value="8">8 разів</option>
+            <option value="9">9 разів</option>
+            <option value="10">10 разів</option>
+            <option value="11">11 разів</option>
+            <option value="12">12 разів</option>
+            <option value="13">13 разів</option>
+            <option value="14">14 разів</option>
+            <option value="15">15 разів</option>
+            <option value="16">16 разів</option>
+            <option value="17">17 разів</option>
+            <option value="18">18 разів</option>
+            <option value="19">19 разів</option>
+            <option value="20">20 разів</option>
+            <option value="-1">∞ - Нескінченно (до реакції користувача)</option>
+          </select>
+          <small data-i18n="popupRepeatCountHelp">Кількість разів показу одного повідомлення</small>
+        </div>
+
+        <div class="form-group">
+          <label for="deliveryMode" data-i18n="deliveryModeLabel">Тип PopUp вікон:</label>
+          <select id="deliveryMode" name="deliveryMode" class="delivery-mode-select">
+            <option value="system">Системні сповіщення (chrome.notifications)</option>
+            <option value="window" selected>Міні-вікно браузера (рекомендовано)</option>
+          </select>
+          <small data-i18n="deliveryModeHelp">Виберіть яким способом отримувати спливаючі вікна</small>
         </div>
 
         <div class="form-group">

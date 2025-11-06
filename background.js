@@ -46,8 +46,10 @@ const state = {
   notificationsManager: null,
   syncManager: null,
   notifier: null,
-  
-  deliveryMode: 'system',
+
+  deliveryMode: 'window',
+  popupRepeatCount: 3,
+  bringToFrontInterval: 0,
   notificationSettings: {},
 
   refreshIntervalSec: 60,
@@ -178,14 +180,26 @@ async function loadSettings() {
       language: "uk",
       syncInterval: 30,
       bringToFrontInterval: 0,
+      popupRepeatCount: 3,
+      deliveryMode: "window",
       enableNotifications: true
     }, (items) => {
       state.creatioUrl = normalizeBase(items.creatioUrl || "");
       state.currentLanguage = items.language || "uk";
       state.refreshIntervalSec = Number(items.syncInterval) || 60;
+      state.deliveryMode = items.deliveryMode || "window";
+      state.popupRepeatCount = items.popupRepeatCount !== undefined ? items.popupRepeatCount : 3;
+      state.bringToFrontInterval = items.bringToFrontInterval || 0;
 
       log("🔧 Loaded Creatio URL:", state.creatioUrl || "(empty)");
-      log("⚙️ Settings loaded:", { hasUrl: !!state.creatioUrl, language: state.currentLanguage, syncInterval: state.refreshIntervalSec });
+      log("⚙️ Settings loaded:", {
+        hasUrl: !!state.creatioUrl,
+        language: state.currentLanguage,
+        syncInterval: state.refreshIntervalSec,
+        deliveryMode: state.deliveryMode,
+        popupRepeatCount: state.popupRepeatCount,
+        bringToFrontInterval: state.bringToFrontInterval
+      });
 
       startBringToFrontInterval(items.bringToFrontInterval);
       resolve();
@@ -640,10 +654,10 @@ async function initializeNotifier() {
   try {
     // Отримуємо налаштування
     const settings = await chrome.storage.sync.get({
-      deliveryMode: 'system',
+      deliveryMode: 'window',
+      popupRepeatCount: 3,
+      bringToFrontInterval: 0,
       requireInteraction: false,
-      repeatCount: 3,
-      repeatInterval: 60,
       autoClose: 10,
       cascade: true,
       openUrlAfterVisa: true,
@@ -664,11 +678,21 @@ async function initializeNotifier() {
         'fa41b6a0-eafd-4bb9-a913-aa74000b46f6': '#06b6d4'
       }
     });
-    
+
     state.deliveryMode = settings.deliveryMode;
-    state.notificationSettings = settings;
-    
-    log("⚙️ Notification settings:", settings.deliveryMode);
+    state.popupRepeatCount = settings.popupRepeatCount !== undefined ? settings.popupRepeatCount : 3;
+    state.bringToFrontInterval = settings.bringToFrontInterval || 0;
+    state.notificationSettings = {
+      ...settings,
+      repeatCount: state.popupRepeatCount,
+      repeatInterval: state.bringToFrontInterval
+    };
+
+    log("⚙️ Notification settings:", {
+      deliveryMode: settings.deliveryMode,
+      repeatCount: state.popupRepeatCount,
+      repeatInterval: state.bringToFrontInterval
+    });
     
     // Callback для дій користувача
     const onAction = async (notificationId, action, data) => {

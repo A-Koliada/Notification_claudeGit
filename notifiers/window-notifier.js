@@ -1,5 +1,5 @@
 // ============================================
-// Window Notifier - Mini-window notifications
+// Window Notifier - Mini-window notifications with repeat support
 // ============================================
 
 export class WindowNotifier {
@@ -7,6 +7,11 @@ export class WindowNotifier {
     this.onAction = onAction; // callback: (notificationId, action, data) => {}
     this.activeWindows = new Map(); // windowId -> notification data
     this.cascadeOffset = 0;
+
+    // Відстеження повторів для кожної нотифікації
+    // notificationId -> { count: number, timerId: number|null, cancelled: boolean }
+    this.repeatTracker = new Map();
+
     this._setupListeners();
   }
 
@@ -20,14 +25,19 @@ export class WindowNotifier {
       if (message.type === "notification-action") {
         const { windowId, action, data } = message;
         this._log("Action received:", action, windowId);
-        
+
+        // При будь-якій дії користувача - відміняємо повтори для цієї нотифікації
+        if (data && data.id) {
+          this._cancelRepeats(data.id);
+        }
+
         this.onAction(windowId, action, data);
-        
+
         // Закриваємо вікно
         if (windowId) {
           this.close(windowId);
         }
-        
+
         sendResponse({ success: true });
         return true;
       }
@@ -44,9 +54,9 @@ export class WindowNotifier {
   }
 
   /**
-   * Показує Mini-window notification
+   * Показує Mini-window notification з підтримкою повторів
    * @param {Object} notification - об'єкт нотифікації з БД
-   * @param {Object} options - налаштування (autoClose, position, cascade)
+   * @param {Object} options - налаштування (autoClose, position, cascade, repeatCount, repeatInterval)
    */
   async show(notification, options = {}) {
     const {
@@ -54,8 +64,12 @@ export class WindowNotifier {
       position = { right: 20, top: 20 },
       width = 400,
       height = 250,
-      cascade = true
+      cascade = true,
+      repeatCount = 3,        // Кількість повторів (0 = без повторів, -1 = нескінченно)
+      repeatInterval = 60     // Інтервал повторів в секундах (відповідає bringToFrontInterval)
     } = options;
+
+    const notifId = notification.id || notification.Id;
 
     // Розрахунок позиції з каскадом
     let top = position.top;
@@ -87,6 +101,13 @@ export class WindowNotifier {
     };
 
     try {
+      // Перевіряємо чи нотифікація не скасована
+      const tracker = this.repeatTracker.get(notifId);
+      if (tracker && tracker.cancelled) {
+        this._log("Notification was cancelled, skipping:", notifId);
+        return;
+      }
+
       const window = await chrome.windows.create({
         url: chrome.runtime.getURL("ui/notification.html"),
         type: "popup",
@@ -113,9 +134,91 @@ export class WindowNotifier {
         });
       }, 100);
 
+      // Встановлюємо повтори якщо потрібно
+      this._setupRepeats(notification, options);
+
     } catch (err) {
       console.error("[WindowNotifier] Failed to create window:", err);
       throw err;
+    }
+  }
+
+  /**
+   * Встановлює повтори для нотифікації
+   */
+  _setupRepeats(notification, options) {
+    const {
+      repeatCount = 3,
+      repeatInterval = 60
+    } = options;
+
+    const notifId = notification.id || notification.Id;
+
+    // Якщо без повторів або вже скасовано
+    if (repeatCount === 0) {
+      this._log("No repeats configured for:", notifId);
+      return;
+    }
+
+    // Отримуємо або створюємо tracker
+    let tracker = this.repeatTracker.get(notifId);
+    if (!tracker) {
+      tracker = { count: 0, timerId: null, cancelled: false };
+      this.repeatTracker.set(notifId, tracker);
+    }
+
+    // Якщо вже скасовано
+    if (tracker.cancelled) {
+      this._log("Repeats already cancelled for:", notifId);
+      return;
+    }
+
+    // Збільшуємо лічильник показів
+    tracker.count++;
+
+    // Перевіряємо чи потрібні ще повтори
+    const needMoreRepeats = repeatCount === -1 || tracker.count < repeatCount;
+
+    if (needMoreRepeats && repeatInterval > 0) {
+      // Очищуємо попередній таймер якщо є
+      if (tracker.timerId) {
+        clearTimeout(tracker.timerId);
+      }
+
+      // Встановлюємо новий таймер для наступного показу
+      tracker.timerId = setTimeout(() => {
+        this._log("Repeating notification:", notifId, "count:", tracker.count);
+        this.show(notification, options);
+      }, repeatInterval * 1000);
+
+      this._log("Repeat scheduled for:", notifId, "in", repeatInterval, "seconds, count:", tracker.count);
+    } else {
+      this._log("No more repeats for:", notifId, "final count:", tracker.count);
+      // Очищуємо tracker після завершення повторів
+      setTimeout(() => {
+        this.repeatTracker.delete(notifId);
+      }, 60000); // Через хвилину після останнього показу
+    }
+  }
+
+  /**
+   * Відміняє всі повтори для нотифікації
+   */
+  _cancelRepeats(notifId) {
+    const tracker = this.repeatTracker.get(notifId);
+    if (tracker) {
+      this._log("Cancelling repeats for:", notifId);
+      tracker.cancelled = true;
+
+      if (tracker.timerId) {
+        clearTimeout(tracker.timerId);
+        tracker.timerId = null;
+      }
+
+      // Видаляємо через 1 секунду
+      setTimeout(() => {
+        this.repeatTracker.delete(notifId);
+      }, 1000);
     }
   }
 
@@ -133,7 +236,7 @@ export class WindowNotifier {
   }
 
   /**
-   * Закриває всі активні вікна
+   * Закриває всі активні вікна і скасовує всі повтори
    */
   async closeAll() {
     const windowIds = Array.from(this.activeWindows.keys());
@@ -141,6 +244,14 @@ export class WindowNotifier {
       await this.close(id);
     }
     this.cascadeOffset = 0;
+
+    // Скасовуємо всі повтори
+    for (const [notifId, tracker] of this.repeatTracker.entries()) {
+      if (tracker.timerId) {
+        clearTimeout(tracker.timerId);
+      }
+    }
+    this.repeatTracker.clear();
   }
 
   /**

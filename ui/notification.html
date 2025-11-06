@@ -7,44 +7,49 @@
   <link rel="stylesheet" href="notification.css">
 </head>
 <body>
-  <div class="notification-container">
-    <!-- Header -->
-    <div class="notification-header" id="notifHeader">
-      <div class="header-content">
-        <img src="../images/icon-48.png" alt="Creatio" class="notification-icon">
-        <h1 class="notification-title" id="notifTitle">Notification</h1>
-      </div>
-      <button class="close-btn" id="closeBtn" title="Close">&times;</button>
-    </div>
+  <div class="notification-container" id="notifContainer">
+    <!-- Body - клікабельне, відкриває URL -->
+    <div class="notification-body clickable" id="notifBody">
+      <!-- Заголовок -->
+      <h1 class="notification-title" id="notifTitle">Loading...</h1>
 
-    <!-- Body -->
-    <div class="notification-body">
+      <!-- Тіло повідомлення - один рядок -->
       <div class="notification-message" id="notifMessage">
-        Loading...
+        Please wait...
       </div>
 
-      <div class="notification-metadata" id="notifMetadata">
-        <span class="metadata-item" id="notifType"></span>
-        <span class="metadata-item" id="notifTime"></span>
+      <!-- Метадані: тип + час -->
+      <div class="notification-metadata">
+        <span class="metadata-type" id="notifType">
+          <span class="type-emoji" id="typeEmoji"></span>
+          <span class="type-name" id="typeName"></span>
+        </span>
+        <span class="metadata-time" id="notifTime"></span>
       </div>
 
       <!-- Visa Section (показується тільки для Visa) -->
       <div class="visa-section" id="visaSection" style="display: none;">
-        <div class="visa-label">Visa Decision:</div>
+        <div class="visa-label">Голосування:</div>
         <select class="visa-select" id="visaSelect">
-          <option value="">-- Select Decision --</option>
-          <option value="positive">✅ Positive</option>
-          <option value="negative">❌ Negative</option>
-          <option value="canceled">🚫 Canceled</option>
+          <option value="">-- Оберіть рішення --</option>
+          <option value="positive">✅ Positive (Позитивно)</option>
+          <option value="negative">❌ Negative (Негативно)</option>
+          <option value="canceled">🚫 Canceled (Скасовано)</option>
         </select>
       </div>
     </div>
 
-    <!-- Footer -->
+    <!-- Footer з іконками -->
     <div class="notification-footer">
-      <button class="btn btn-delete" id="deleteBtn">🗑 Delete</button>
-      <button class="btn btn-done" id="doneBtn" style="display: none;">✔ Mark as read</button>
-      <button class="btn btn-visa" id="visaBtn" style="display: none;">📝 Submit Visa</button>
+      <button class="icon-btn btn-delete" id="deleteBtn" title="Видалити і відмінити повтори">
+        🗑️
+      </button>
+      <button class="icon-btn btn-done" id="doneBtn" title="Закрити і відмінити повтори" style="display: none;">
+        ✅
+      </button>
+      <button class="btn btn-visa" id="visaBtn" style="display: none;">
+        Проголосувати
+      </button>
     </div>
 
     <!-- Auto-close timer bar -->

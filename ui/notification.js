@@ -6,22 +6,41 @@ let notificationData = null;
 let windowId = null;
 let autoCloseTimer = null;
 
+// Мапінг типів нотифікацій на emoji
+const TYPE_EMOJI_MAP = {
+  'ead36165-7815-45d1-9805-1faa47de504a': '✍️', // Visa
+  '337065ba-e6e6-4086-b493-0f6de115bc7a': '🔔', // Reminder
+  '7e1bf266-2e6b-49a5-982b-4ae407f3ae26': '⚙️', // System
+  '8ebcc160-7a78-444b-8904-0a78348a5141': '📧', // Email
+  'ae6c7636-32fd-4548-91a7-1784a28e7f9e': '⭐', // Custom
+  'fa41b6a0-eafd-4bb9-a913-aa74000b46f6': '💬'  // ESN
+};
+
+const TYPE_NAME_MAP = {
+  'ead36165-7815-45d1-9805-1faa47de504a': 'Visa',
+  '337065ba-e6e6-4086-b493-0f6de115bc7a': 'Reminder',
+  '7e1bf266-2e6b-49a5-982b-4ae407f3ae26': 'System',
+  '8ebcc160-7a78-444b-8904-0a78348a5141': 'Email',
+  'ae6c7636-32fd-4548-91a7-1784a28e7f9e': 'Custom',
+  'fa41b6a0-eafd-4bb9-a913-aa74000b46f6': 'ESN'
+};
+
 // ============================================
 // INITIALIZATION
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log('[Notification Window] DOM loaded');
-  
+
   // Отримуємо ID вікна
   chrome.windows.getCurrent((window) => {
     windowId = window.id;
     console.log('[Notification Window] Window ID:', windowId);
-    
+
     // Запитуємо дані у background
     requestNotificationData();
   });
-  
+
   // Слухаємо повідомлення від background
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'notification-data') {
@@ -32,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return true;
     }
   });
-  
+
   // Setup event listeners
   setupEventListeners();
 });
@@ -57,7 +76,7 @@ function requestNotificationData() {
 
 function renderNotification() {
   if (!notificationData) return;
-  
+
   const {
     title,
     message,
@@ -67,32 +86,26 @@ function renderNotification() {
     isVisa,
     autoClose
   } = notificationData;
-  
-  // Title
-  document.getElementById('notifTitle').textContent = truncate(title, 40);
-  
-  // Message (truncate до 200 символів)
-  document.getElementById('notifMessage').textContent = truncate(message, 200);
-  
-  // Type badge (опціонально)
-  const typeEl = document.getElementById('notifType');
-  if (typeId) {
-    typeEl.textContent = getTypeName(typeId);
-    typeEl.style.display = 'inline-block';
-  }
-  
+
+  // Title - повний заголовок
+  document.getElementById('notifTitle').textContent = title || 'Notification';
+
+  // Message - один рядок з ellipsis (автоматично через CSS)
+  document.getElementById('notifMessage').textContent = message || '';
+
+  // Type emoji + name
+  const typeEmoji = TYPE_EMOJI_MAP[typeId] || '⭐';
+  const typeName = TYPE_NAME_MAP[typeId] || 'Custom';
+
+  document.getElementById('typeEmoji').textContent = typeEmoji;
+  document.getElementById('typeName').textContent = typeName;
+
   // Time
   const timeEl = document.getElementById('notifTime');
   if (createdOn) {
     timeEl.textContent = formatTime(createdOn);
-    timeEl.style.display = 'inline-block';
   }
-  
-  // Priority header color
-  if (priority > 0) {
-    document.getElementById('notifHeader').classList.add('high-priority');
-  }
-  
+
   // Visa section
   if (isVisa) {
     document.getElementById('visaSection').style.display = 'block';
@@ -103,11 +116,14 @@ function renderNotification() {
     document.getElementById('visaBtn').style.display = 'none';
     document.getElementById('doneBtn').style.display = 'flex';
   }
-  
+
   // Auto-close timer
   if (autoClose > 0) {
     startAutoCloseTimer(autoClose);
   }
+
+  // Авто-розмір вікна під контент
+  adjustWindowSize();
 }
 
 // ============================================
@@ -115,28 +131,30 @@ function renderNotification() {
 // ============================================
 
 function setupEventListeners() {
-  // Close button
-  document.getElementById('closeBtn').addEventListener('click', () => {
-    window.close();
-  });
-  
-  // Header click - відкрити URL
-  document.getElementById('notifHeader').addEventListener('click', () => {
+  // Body click - відкрити URL і позначити як прочитане
+  document.getElementById('notifBody').addEventListener('click', (e) => {
+    // Перевіряємо чи клік не на visa select або кнопках
+    if (e.target.closest('.visa-section')) {
+      return; // Не відкриваємо URL при кліку на visa розділ
+    }
     handleAction('click');
   });
-  
-  // Delete button
-  document.getElementById('deleteBtn').addEventListener('click', () => {
+
+  // Delete button - видалити і відмінити повтори
+  document.getElementById('deleteBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
     handleAction('delete');
   });
-  
-  // Done button
-  document.getElementById('doneBtn').addEventListener('click', () => {
+
+  // Done button - закрити і відмінити повтори
+  document.getElementById('doneBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
     handleAction('done');
   });
-  
+
   // Visa submit button
-  document.getElementById('visaBtn').addEventListener('click', () => {
+  document.getElementById('visaBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
     handleVisaSubmit();
   });
 }
@@ -215,38 +233,46 @@ function startAutoCloseTimer(seconds) {
 // HELPERS
 // ============================================
 
-function truncate(str, maxLength) {
-  if (!str) return '';
-  if (str.length <= maxLength) return str;
-  return str.substring(0, maxLength - 3) + '...';
-}
-
-function getTypeName(typeId) {
-  const types = {
-    'ead36165-7815-45d1-9805-1faa47de504a': 'Visa',
-    '337065ba-e6e6-4086-b493-0f6de115bc7a': 'Reminder',
-    '7e1bf266-2e6b-49a5-982b-4ae407f3ae26': 'System',
-    '8ebcc160-7a78-444b-8904-0a78348a5141': 'Email',
-    'ae6c7636-32fd-4548-91a7-1784a28e7f9e': 'Custom',
-    'fa41b6a0-eafd-4bb9-a913-aa74000b46f6': 'ESN'
-  };
-  return types[typeId] || 'Notification';
-}
-
 function formatTime(isoString) {
   if (!isoString) return '';
-  
+
   const date = new Date(isoString);
   const now = new Date();
   const diffMs = now - date;
   const diffMins = Math.floor(diffMs / 60000);
-  
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  
+
+  if (diffMins < 1) return 'щойно';
+  if (diffMins < 60) return `${diffMins}хв тому`;
+
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  
+  if (diffHours < 24) return `${diffHours}год тому`;
+
   const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+  if (diffDays === 1) return 'вчора';
+  return `${diffDays}д тому`;
+}
+
+// Авто-розмір вікна під контент
+function adjustWindowSize() {
+  // Отримуємо розміри контенту
+  const container = document.getElementById('notifContainer');
+  const body = document.getElementById('notifBody');
+
+  if (!container || !body) return;
+
+  // Затримка щоб контент встиг відрендеритись
+  setTimeout(() => {
+    const contentHeight = container.scrollHeight;
+    const contentWidth = Math.max(350, Math.min(500, body.scrollWidth + 32));
+
+    // Оновлюємо розмір вікна
+    chrome.windows.getCurrent((win) => {
+      chrome.windows.update(win.id, {
+        width: Math.ceil(contentWidth),
+        height: Math.ceil(contentHeight + 50) // +50 для запасу
+      }).catch(err => {
+        console.log('[Notification Window] Could not resize:', err);
+      });
+    });
+  }, 100);
 }
