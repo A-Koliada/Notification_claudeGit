@@ -426,44 +426,130 @@ function renderNotifications() {
     return;
   }
 
-  elements.container.innerHTML = state.notifications.map(notification => `
-    <div class="notification-item" data-id="${notification.id}">
-      <div class="notification-title">${escapeHtml(notification.title)}</div>
-      <div class="notification-message">${escapeHtml(notification.message)}</div>
-      <div class="notification-meta">
-        <span class="notification-type">${escapeHtml(resolveTypeName(notification))}</span>
-        <span class="notification-date">${formatDate(notification.date)}</span>
+  elements.container.innerHTML = state.notifications.map(notification => {
+    const typeName = resolveTypeName(notification);
+    const isVisa = typeName === 'Visa';
+
+    return `
+      <div class="notification-item" data-id="${notification.id}">
+        <div class="notification-content">
+          <div class="notification-title">${escapeHtml(notification.title)}</div>
+          <div class="notification-message">${escapeHtml(notification.message)}</div>
+          <div class="notification-meta">
+            <span class="notification-type">${escapeHtml(typeName)}</span>
+            <span class="notification-date">${formatDate(notification.date)}</span>
+          </div>
+        </div>
+        <div class="notification-actions">
+          <button class="notification-btn btn-read" data-action="read" title="Прочитано">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9,20.42L2.79,14.21L5.62,11.38L9,14.77L18.88,4.88L21.71,7.71L9,20.42Z"/>
+            </svg>
+          </button>
+          <button class="notification-btn btn-delete" data-action="delete" title="Видалити">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/>
+            </svg>
+          </button>
+          ${isVisa ? `
+          <button class="notification-btn btn-visa" data-action="visa" title="Проголосувати">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9,10H7V12H9V10M13,10H11V12H13V10M17,10H15V12H17V10M19,3H18V1H16V3H8V1H6V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5A2,2 0 0,0 19,3M19,19H5V8H19V19Z"/>
+            </svg>
+          </button>
+          ` : ''}
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   // Add event listeners to notification items
   document.querySelectorAll('.notification-item').forEach(item => {
-    item.addEventListener('click', handleNotificationClick);
+    const notificationContent = item.querySelector('.notification-content');
+    if (notificationContent) {
+      notificationContent.addEventListener('click', handleNotificationClick);
+    }
+
+    // Add event listeners to buttons
+    const buttons = item.querySelectorAll('.notification-btn');
+    buttons.forEach(button => {
+      button.addEventListener('click', handleNotificationButtonClick);
+    });
   });
 }
 
 // Handle notification click
 function handleNotificationClick(e) {
-  const notificationId = e.currentTarget.getAttribute('data-id');
+  // Get the notification item parent
+  const notificationItem = e.currentTarget.closest('.notification-item');
+  if (!notificationItem) return;
+
+  const notificationId = notificationItem.getAttribute('data-id');
   const notification = state.notifications.find(n => n.id === notificationId);
-  
+
   if (!notification) return;
 
   // Open URL if available
-  if (notification.url) {
-    window.open(notification.url, '_blank');
-  }
-  
-  // Mark as read
-  chrome.runtime.sendMessage({ 
-    action: "markAsRead", 
-    id: notification.id 
-  }).then(() => {
-    loadNotifications();
+  chrome.runtime.sendMessage({
+    action: "openNotificationUrl",
+    id: notification.id,
+    sourceUrl: notification.url || notification.sourceUrl || notification.DnSourceUrl
   }).catch(error => {
-    log('Error marking as read:', error);
+    log('Error opening notification URL:', error);
   });
+}
+
+// Handle notification button click
+async function handleNotificationButtonClick(e) {
+  e.stopPropagation(); // Prevent notification click event
+
+  const button = e.currentTarget;
+  const action = button.getAttribute('data-action');
+  const notificationItem = button.closest('.notification-item');
+  if (!notificationItem) return;
+
+  const notificationId = notificationItem.getAttribute('data-id');
+  const notification = state.notifications.find(n => n.id === notificationId);
+
+  if (!notification) return;
+
+  try {
+    switch (action) {
+      case 'read':
+        // Mark as read
+        await chrome.runtime.sendMessage({
+          action: "markAsRead",
+          id: notification.id
+        });
+        loadNotifications();
+        break;
+
+      case 'delete':
+        // Delete notification
+        await chrome.runtime.sendMessage({
+          action: "deleteNotification",
+          id: notification.id
+        });
+        loadNotifications();
+        break;
+
+      case 'visa':
+        // Open visa decision dialog or directly set visa status
+        // For now, we'll open a simple prompt
+        const decision = confirm('Схвалити візу? (OK = Схвалено, Cancel = Відхилено)');
+        if (decision !== null) {
+          await chrome.runtime.sendMessage({
+            action: "updateVisaDecision",
+            id: notification.id,
+            decision: decision ? 'approved' : 'rejected'
+          });
+          loadNotifications();
+        }
+        break;
+    }
+  } catch (error) {
+    log('Error handling button action:', error);
+  }
 }
 
 // Load settings to form
@@ -473,6 +559,8 @@ async function loadSettingsToForm() {
       creatioUrl: "",
       notificationTimeout: 0,
       bringToFrontInterval: 20,
+      deliveryMode: "window",
+      popupRepeatCount: 3,
       language: "en"
     });
 
@@ -481,6 +569,8 @@ async function loadSettingsToForm() {
       form.querySelector('#creatioUrl').value = settings.creatioUrl;
       form.querySelector('#notificationTimeout').value = settings.notificationTimeout;
       form.querySelector('#bringToFrontInterval').value = settings.bringToFrontInterval;
+      form.querySelector('#deliveryMode').value = settings.deliveryMode;
+      form.querySelector('#popupRepeatCount').value = settings.popupRepeatCount;
       form.querySelector('#language').value = settings.language;
     }
 
@@ -493,15 +583,17 @@ async function loadSettingsToForm() {
 // Handle settings submit
 async function handleSettingsSubmit(e) {
   e.preventDefault();
-  
+
   const formData = new FormData(e.target);
   const settings = {
     creatioUrl: formData.get('creatioUrl').trim(),
     notificationTimeout: parseInt(formData.get('notificationTimeout')) || 0,
     bringToFrontInterval: Math.max(5, parseInt(formData.get('bringToFrontInterval')) || 20),
+    deliveryMode: formData.get('deliveryMode') || 'window',
+    popupRepeatCount: parseInt(formData.get('popupRepeatCount')) || 3,
     language: formData.get('language')
   };
-  
+
   const oldLanguage = state.currentLanguage;
   
   try {
@@ -554,6 +646,8 @@ async function handleResetSettings() {
     creatioUrl: "",
     notificationTimeout: 0,
     bringToFrontInterval: 20,
+    deliveryMode: "window",
+    popupRepeatCount: 3,
     language: "en"
   };
   

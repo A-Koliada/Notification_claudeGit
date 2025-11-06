@@ -159,20 +159,28 @@ class SyncManager {
       console.log('[SyncManager] ✅ Notifier is available:', this.notifier.constructor.name);
       
       // Отримуємо налаштування
-      const settings = this.settings || await new Promise(resolve => {
-        chrome.storage.sync.get({
-          showPopupNotifications: true,
-          enableNotifications: true,
-          enabledTypes: [
-            'ead36165-7815-45d1-9805-1faa47de504a',
-            '337065ba-e6e6-4086-b493-0f6de115bc7a',
-            '7e1bf266-2e6b-49a5-982b-4ae407f3ae26',
-            '8ebcc160-7a78-444b-8904-0a78348a5141',
-            'ae6c7636-32fd-4548-91a7-1784a28e7f9e',
-            'fa41b6a0-eafd-4bb9-a913-aa74000b46f6'
-          ]
-        }, resolve);
-      });
+      const settings = this.settings || {};
+
+      // Якщо settings порожній, завантажуємо з chrome.storage.sync
+      if (!settings.showPopupNotifications && settings.showPopupNotifications !== false) {
+        const storageSettings = await new Promise(resolve => {
+          chrome.storage.sync.get({
+            showPopupNotifications: true,
+            enableNotifications: true,
+            enabledTypes: [
+              'ead36165-7815-45d1-9805-1faa47de504a',
+              '337065ba-e6e6-4086-b493-0f6de115bc7a',
+              '7e1bf266-2e6b-49a5-982b-4ae407f3ae26',
+              '8ebcc160-7a78-444b-8904-0a78348a5141',
+              'ae6c7636-32fd-4548-91a7-1784a28e7f9e',
+              'fa41b6a0-eafd-4bb9-a913-aa74000b46f6'
+            ]
+          }, resolve);
+        });
+
+        // Об'єднуємо з поточними settings
+        Object.assign(settings, storageSettings);
+      }
       
       console.log('[SyncManager] 📋 Settings:', {
         showPopup: settings.showPopupNotifications,

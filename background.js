@@ -1018,7 +1018,17 @@ function setupMessageListeners() {
               sendResponse({ success: true, count: result?.count || 0 });
               return;
             }
-  
+
+            case "openNotificationUrl": {
+              // Відкрити URL повідомлення
+              if (message.sourceUrl && state.creatioUrl) {
+                const fullUrl = state.creatioUrl + message.sourceUrl;
+                await chrome.tabs.create({ url: fullUrl });
+              }
+              sendResponse({ success: true });
+              return;
+            }
+
             case "deleteNotification": {
               await state.notificationsManager?.deleteNotification?.(message.id);
               setTimeout(() => state.syncManager?.quickSync?.(), 400);
@@ -1231,6 +1241,8 @@ function processNotificationData(items) {
     message: item.DnMessage || item.DnDescription || "",
     date: item.CreatedOn || new Date().toISOString(),
     url: item.DnSourceUrl || "",
+    sourceUrl: item.DnSourceUrl || "",
+    DnSourceUrl: item.DnSourceUrl || "",
     // Use the fetched notification type name, fallback to ID lookup, then "Custom"
     type: item.DnNotificationType || getNotificationTypeName(item.DnNotificationTypeId) || "Custom",
     typeId: item.DnNotificationTypeId,
@@ -1238,7 +1250,8 @@ function processNotificationData(items) {
     dataRead: item.DnDataRead || null,
     visaCanceled: !!item.DnVisaCanceled,
     visaNegative: !!item.DnVisaNegative,
-    visaPositive: !!item.DnVisaPositive
+    visaPositive: !!item.DnVisaPositive,
+    Raw: item
   }));
 }
 
